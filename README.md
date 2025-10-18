@@ -1,31 +1,81 @@
 # Reinforcement Learning: Q-Learning vs Deep Q-Learning
 
-A comparative study of tabular Q-Learning and Deep Q-Networks (DQN) on the FrozenLake environment, implemented with PyTorch and visualized using Streamlit.
+A comparative study of tabular Q-Learning and Deep Q-Networks (DQN) on OpenAI's Gymnasium environments. Neural networks approximated with PyTorch and deployed interactivity on Streamlit.
 
-## 🎯 Project Overview
-
-This project demonstrates the fundamental differences between **tabular Q-Learning** and **Deep Q-Learning (DQN)** by training agents to solve the FrozenLake environment. The interactive Streamlit dashboard allows you to compare both approaches side-by-side with real-time visualization.
-
-## 🧠 Understanding Q-Learning vs Deep Q-Learning
+## Understanding Q-Learning vs Deep Q-Learning
 
 ### Tabular Q-Learning
-- **What it is**: A model-free reinforcement learning algorithm that learns the value of state-action pairs in a lookup table
-- **How it works**: 
-  - Maintains a Q-table: `Q(state, action) = expected future reward`
-  - Updates Q-values using the Bellman equation: `Q(s,a) = Q(s,a) + α[r + γ*max(Q(s',a')) - Q(s,a)]`
-  - Uses ε-greedy policy for exploration vs exploitation
-- **Pros**: Simple, interpretable, guaranteed convergence
-- **Cons**: Doesn't scale to large state spaces, requires discrete states (wouldnt work with the CartPole environment)
+- **What it is**: Q-learning learns an action-value function Q(s,a) that estimates the expected cumulative reward for taking action a in state s. The algorithm maintains a lookup table mapping state-action pairs to Q-values.
+Update Rule
+Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') - Q(s,a)]
+                      a'
+Converges to the optimal Q*(s, a) 
+Where:
+  α (alpha): Learning rate controlling update step size
+  
+  γ (gamma): Discount factor for future rewards (0 < γ ≤ 1)
+    if -> 1:
+      value all rewards equally
+    if -> 0:
+      value immediate rewards more
+  r: Immediate, current reward
+  s': Next state
+  TD error: r + γ·max Q(s',a') - Q(s,a) measures prediction error
+
+Exploration-Exploitation
+Uses ε-greedy policy:
+  With probability ε: select random action (explore)
+  With probability 1-ε: select argmax Q(s,a) (exploit)
+  ε decays over time: ε ← max(ε × decay, ε_min) after more about the environment is known
+  
+Limitations
+  Only suitable for discrete, small state spaces
+  Memory grows linearly with state-action pairs
+  Cannot generalize to unseen states
 
 ### Deep Q-Learning (DQN)
-- **What it is**: Uses a neural network to approximate Q-values instead of a lookup table
+- **What it is**: DQN replaces the Q-table with a neural network that approximates Q(s,a) for all actions simultaneously.
 - **How it works**:
-  - Neural network takes state as input, outputs Q-values for all actions
-  - Uses experience replay to break correlation between consecutive samples
-  - Employs target network for stable training
-  - Updates network weights using gradient descent
-- **Pros**: Scales to continuous/high-dimensional state spaces, can handle complex environments
-- **Cons**: More complex, requires tuning, can be unstable
+    Architecture:
+    Neural Network: state → [128] → [128] → [64] → [action_size]
+    
+    Input: State vector [ex: 4 values for CartPole]
+    Output: Q-value for each possible action 
+    Activation: ReLU between layers  [hidden layers to allow non-linearity]
+
+    Problem: DQN combines function approximation + using estimates to update estimates + off policy learning. This leads to instability. DQN solves this with techniques here:
+
+    1. Experience Replay
+    Stores transitions (s, a, r, s', done) in a replay buffer [eg size = 10,000]. During training sample these batches randomly. 
+
+    2. Target Network
+      Maintains a separate target network with frozen weights for computing TD targets:
+      target = r + γ·max Q_target(s', a')
+                       a'
+      The moving target problem: If we use the same network for both prediction and target, we're chasing a moving target:
+      Loss = (Q_θ(s,a) - [r + γ·max Q_θ(s',a')])²
+                                a'
+      As θ updates, the target shifts, causing oscillations.
+
+    Solution: Freeze target network weights for N episodes, then sync:
+      θ_target ← θ_main  (every 10 episodes)
+      This creates a stable target during each training phase, proven to improve convergence.
+
+    3. Loss Function
+    Mean Squared Error between predicted and target Q-values:
+    Loss = (1/N) Σ [Q(s,a) - (r + γ·max Q_target(s',a'))]²
+    Minimizing this loss via gradient descent makes predictions closer to Bellman targets.
+
+    Training Process
+
+    Act: Agent selects action using ε-greedy on main network Q(s,·)
+    Observe: Environment returns (s', r, done)
+    Store: Add transition to replay buffer
+    Sample: Draw random batch of 64 transitions from buffer
+    Compute targets: Use frozen target network for stable TD targets
+    Update: Backpropagate loss to update main network weights
+    Sync: Every 10 episodes, copy θ_main → θ_target
+    Decay: Reduce ε to gradually shift from exploration to exploitation
 
 ### Key Differences
 
@@ -64,58 +114,8 @@ class DQN(nn.Module):
         )
 ```
 
-## 🚀 Getting Started
-
-### Prerequisites
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install torch torchvision
-pip install gymnasium streamlit matplotlib numpy
-```
-
-### Running the Application
-```bash
-# Start the Streamlit dashboard
-streamlit run main.py
-```
-
-## 🎮 How to Use
-
-### 1. **Training Parameters**
-- **Training Episodes**: Number of episodes to train (100-50,000)
-- **Max Steps**: Maximum steps per episode (10-500)
-- **Learning Rate (α)**: How fast the agent learns (0.01-1.0)
-- **Discount Factor (γ)**: Importance of future rewards (0.1-0.99)
-- **Epsilon**: Exploration rate (0.01-1.0)
-- **Epsilon Decay**: How quickly exploration decreases (0.9-0.9999)
-
-### 2. **Algorithm Selection**
-Choose between:
-- **Q-Learning (tabular)**: Traditional lookup table approach
-- **Deep Q-Learning (neural network)**: Neural network approximation
-
-### 3. **DQN-Specific Parameters**
-- **Replay Batch Size**: Number of experiences sampled for training (16-256)
-- **Warmup Period**: Minimum experiences before training starts (0-5,000)
-
-### 4. **Training Process**
-1. Click "Train Agent" to start training
-2. Watch real-time progress with reward charts
-3. Monitor epsilon decay and learning progress
-4. Training completes when all episodes are finished
-
-### 5. **Watching the Agent**
-1. Click "Watch Trained Agent" after training
-2. See the agent navigate the environment in real-time
-3. View Q-values and action explanations (for tabular Q-learning)
-4. Observe success/failure outcomes
-
-## 🔧 PyTorch Implementation Details
-
+## PyTorch Implementation Details
+  
 ### Neural Network Setup
 ```python
 import torch
@@ -139,6 +139,35 @@ class DQN(nn.Module):
     def forward(self, x):
         return self.model(x)
 ```
+nn.Module: Base class providing parameter tracking and device management
+nn.Sequential: Container that chains layers (output of layer i → input of layer i+1)
+nn.Linear(in, out): Applies affine transformation y = xW^T + b
+
+Weights W initialized with Kaiming/Xavier initialization
+Bias b initialized to zeros
+
+nn.ReLU: max(0, x) — introduces non-linearity, prevents vanishing gradients
+
+Why these dimensions? 128 → 128 → 64 is a common funnel pattern. First layers learn general features, later layers learn task-specific features. Total params ≈ 25K for CartPole.
+
+2. Forward Pass
+pythondef forward(self, x):
+    return self.model(x)
+Defines data flow through network. PyTorch automatically calls this via model(input).
+The forward pass computes:
+x → W1·x + b1 → ReLU → W2·x + b2 → ReLU → ... → Q-values
+
+3. Tensor Operations
+pythonstate = torch.FloatTensor(state)     # numpy array → PyTorch tensor
+q_values = model(state)               # Forward pass
+action = torch.argmax(q_values).item() # Get index of max value
+Tensors are PyTorch's multi-dimensional arrays optimized for:
+
+Vectorized operations (SIMD)
+GPU memory layout (coalesced access)
+Automatic gradient tracking
+
+.unsqueeze(0) adds a batch dimension: [4] → [1, 4] because networks expect batches.
 
 ### Training Loop
 ```python
@@ -172,6 +201,59 @@ def replay(self, batch_size=64):
     loss.backward()
     self.optimizer.step()
 ```
+.gather() selects Q-values for actions taken: converts [batch, num_actions] → [batch].
+Example: If actions = [1, 0, 2] and Q = [[0.1, 0.3], [0.5, 0.2], [0.4, 0.7]], gather returns [0.3, 0.5, 0.7].
+python# Compute targets using frozen target network
+with torch.no_grad():
+    next_q_values = self.target_model(next_states).max(1)[0]
+    targets = rewards + gamma * next_q_values * (1 - dones)
+torch.no_grad(): Disables autograd (no gradient calculation). Why?
+
+Target network is frozen (no backprop needed)
+Saves memory (no intermediate activations stored)
+Faster computation
+
+(1 - dones) zeros out future value if episode ended (terminal state has no future).
+python# Backpropagation
+loss = self.loss_fn(q_values, targets)
+self.optimizer.zero_grad()  # Clear old gradients (they accumulate by default)
+loss.backward()              # Compute ∂Loss/∂θ via chain rule
+self.optimizer.step()        # Update θ ← θ - lr·∇Loss
+
+Optimizer: Adam
+pythonself.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+Adam combines momentum and adaptive learning rates:
+
+Momentum: Uses exponential moving average of gradients (reduces oscillation)
+RMSProp: Adapts learning rate per parameter based on gradient magnitude
+Bias correction: Corrects initialization bias in moving averages
+
+Update rule (simplified):
+m_t = β1·m_{t-1} + (1-β1)·∇Loss      # momentum
+v_t = β2·v_{t-1} + (1-β2)·(∇Loss)²    # variance
+θ_t = θ_{t-1} - α·m_t / (√v_t + ε)    # adaptive update
+Better than SGD for deep networks because it handles:
+
+Sparse gradients (common in RL)
+Non-stationary objectives (Q-values constantly shift)
+Ill-conditioned problems (different parameters need different learning rates)
+
+Gradient Control
+pythonwith torch.no_grad():
+    # Code here doesn't track gradients
+    predictions = model(x)
+Why disable gradients?
+
+Inference: Don't need gradients when just using the model
+Memory: Autograd stores intermediate activations (can be 2-3x model size)
+Speed: Skips gradient computation overhead
+
+Autograd mechanics: PyTorch builds a dynamic computation graph as operations execute. Each tensor remembers its creation operation. When .backward() is called, it traverses the graph in reverse computing gradients via chain rule.
+
+7.Model Synchronization
+pythonself.target_model.load_state_dict(self.model.state_dict())
+.state_dict() returns an OrderedDict of all parameters: {'model.0.weight': tensor(...), 'model.0.bias': tensor(...), ...}
+.load_state_dict() copies these parameters to target network. This is a deep copy—modifying one network doesn't affect the other.
 
 ### Key PyTorch Concepts Used
 - **Tensors**: Multi-dimensional arrays for neural network computations
@@ -179,6 +261,56 @@ def replay(self, batch_size=64):
 - **Optimizers**: Adam optimizer for weight updates
 - **Loss Functions**: MSE loss for Q-value approximation
 - **Target Networks**: Separate network for stable training targets
+
+## Getting Started
+
+### Prerequisites
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install torch torchvision
+pip install gymnasium streamlit matplotlib numpy
+```
+
+### Running the Application
+```bash
+# Start the Streamlit dashboard
+streamlit run main.py
+```
+
+## How to Use
+
+### 1. **Training Parameters**
+- **Training Episodes**: Number of episodes to train (100-50,000)
+- **Max Steps**: Maximum steps per episode (10-500)
+- **Learning Rate (α)**: How fast the agent learns (0.01-1.0)
+- **Discount Factor (γ)**: Importance of future rewards (0.1-0.99)
+- **Epsilon**: Exploration rate (0.01-1.0)
+- **Epsilon Decay**: How quickly exploration decreases (0.9-0.9999)
+
+### 2. **Algorithm Selection**
+Choose between:
+- **Q-Learning (tabular)**: Traditional lookup table approach
+- **Deep Q-Learning (neural network)**: Neural network approximation
+
+### 3. **DQN-Specific Parameters**
+- **Replay Batch Size**: Number of experiences sampled for training (16-256)
+- **Warmup Period**: Minimum experiences before training starts (0-5,000)
+
+### 4. **Training Process**
+1. Click "Train Agent" to start training
+2. Watch real-time progress with reward charts
+3. Monitor epsilon decay and learning progress
+4. Training completes when all episodes are finished
+
+### 5. **Watching the Agent**
+1. Click "Watch Trained Agent" after training
+2. See the agent navigate the environment in real-time
+3. View Q-values and action explanations (for tabular Q-learning)
+4. Observe success/failure outcomes
 
 ## 📊 Expected Results
 
@@ -192,7 +324,7 @@ def replay(self, batch_size=64):
 - **Performance**: Can achieve high success rates but may be less stable
 - **Scalability**: Can handle much larger state spaces than tabular methods
 
-## 🐛 Common Issues & Solutions
+## Common Issues & Solutions
 
 ### DQN Not Learning
 - **Problem**: Learning rate too high (try 0.001)
@@ -220,11 +352,6 @@ RL_Agent/
 ├── README.md            # This file
 └── venv/                # Virtual environment
 ```
-
-
-## 🤝 Contributing
-
-Feel free to submit issues, feature requests, or pull requests to improve this educational project!
-
+## References:
+https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 ---
-
