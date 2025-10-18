@@ -8,7 +8,7 @@ from dqn import DQNAgent    # deep learning agent
 
 
 # Streamlit dashboard
-st.title("Q-learning vs Deep Q-learning on FrozenLake")
+st.title("Q-learning vs Deep Q-learning: FrozenLake & Taxi")
 
 if 'agent' not in st.session_state:
     st.session_state.agent = None
@@ -16,6 +16,8 @@ if 'trained' not in st.session_state:
     st.session_state.trained = False
 if 'algorithm' not in st.session_state:
     st.session_state.algorithm = None
+if 'environment' not in st.session_state:
+    st.session_state.environment = None
 
 # Streamlit sidebar
 num_episodes = st.sidebar.slider("Training Episodes", 100, 50000, 5000, step=100)
@@ -31,27 +33,36 @@ gamma = st.sidebar.slider("Discount (gamma)", 0.1, 0.99, 0.95)
 replay_batch_size = st.sidebar.slider("DQN replay batch size", 16, 256, 64, step=16)
 dqn_start_training = st.sidebar.slider("DQN warmup (min experiences before replay)", 0, 5000, 100, step=10)
 
-# Create FrozenLake environment
-env = gym.make('FrozenLake-v1', is_slippery=False)
+# Choose environment
+environment = st.sidebar.selectbox("Environment", ["FrozenLake-v1", "Taxi-v3"])
+
+# Create environment
+if environment == "FrozenLake-v1":
+    env = gym.make('FrozenLake-v1', is_slippery=False)
+    env_name = "FrozenLake"
+elif environment == "Taxi-v3":
+    env = gym.make('Taxi-v3')
+    env_name = "Taxi"
 
 # Choose algorithm
 algorithm = st.sidebar.selectbox("Algorithm", ["Q-Learning (tabular)", "Deep Q-Learning (neural network)"])
 
-# Create new agent if algorithm changed
-if st.session_state.algorithm != algorithm:
+# Create new agent if algorithm or environment changed
+if st.session_state.algorithm != algorithm or st.session_state.environment != environment:
     st.session_state.trained = False
     st.session_state.algorithm = algorithm
+    st.session_state.environment = environment
     
     if algorithm == "Q-Learning (tabular)":
         st.session_state.agent = QLearningAgent(env, alpha=alpha, gamma=gamma, epsilon=epsilon, 
                                                  epsilon_decay=epsilon_decay, epsilon_min=epsilon_min)
-        st.sidebar.write("Using tabular Q-Learning")
+        st.sidebar.write(f"Using tabular Q-Learning on {env_name}")
     else: 
         state_size = env.observation_space.n
         action_size = env.action_space.n
         st.session_state.agent = DQNAgent(state_size, action_size, alpha=alpha, gamma=gamma, 
                                           epsilon=epsilon, epsilon_min=epsilon_min, epsilon_decay=epsilon_decay)
-        st.sidebar.write("Using PyTorch DQN. DQN needs more episodes + replay buffer to work well")
+        st.sidebar.write(f"Using PyTorch DQN on {env_name}. DQN needs more episodes + replay buffer to work well")
 
 agent = st.session_state.agent
 
@@ -94,12 +105,22 @@ if train_button:
             if algorithm == "Q-Learning (tabular)":
                 shaped_reward = reward
             else:
-                if terminated and reward > 0:
-                    shaped_reward = 1.0
-                elif terminated and reward == 0:
-                    shaped_reward = -1.0
-                else:
-                    shaped_reward = -0.01
+                # Environment-specific reward shaping for DQN
+                if environment == "FrozenLake-v1":
+                    if terminated and reward > 0:
+                        shaped_reward = 1.0
+                    elif terminated and reward == 0:
+                        shaped_reward = -1.0
+                    else:
+                        shaped_reward = -0.01
+                elif environment == "Taxi-v3":
+                    # Taxi has different reward structure: +20 for success, -10 for illegal action, -1 for each step
+                    if reward == 20:  # Successfully dropped off passenger
+                        shaped_reward = 20.0
+                    elif reward == -10:  # Illegal action
+                        shaped_reward = -10.0
+                    else:  # -1 for each step
+                        shaped_reward = -0.1
 
             if algorithm == "Q-Learning (tabular)":
                 # Update Q-values
@@ -162,36 +183,54 @@ if watch_button:
         original_epsilon = agent.epsilon
         agent.epsilon = 0.0
         
-        # FIX: slippery false
-        watch_env = gym.make('FrozenLake-v1', is_slippery=False)
+        # Create watch environment (same as training)
+        if environment == "FrozenLake-v1":
+            watch_env = gym.make('FrozenLake-v1', is_slippery=False)
+        elif environment == "Taxi-v3":
+            watch_env = gym.make('Taxi-v3')
         obs, _ = watch_env.reset()
         total_reward = 0
-        grid_size = int(np.sqrt(watch_env.observation_space.n))
-        
-        # Get the map for visualization
-        desc = watch_env.unwrapped.desc.astype(str)
         
         placeholder = st.empty()
         steps_taken = 0
 
         for step in range(50):
-            # Render grid with emojis
-            grid_display = []
-            for i in range(grid_size):
-                row = []
-                for j in range(grid_size):
-                    idx = i * grid_size + j
-                    if idx == obs:
-                        row.append("🤖")  # Agent
-                    elif desc[i][j] == 'S':
-                        row.append("🟢")  # Start
-                    elif desc[i][j] == 'G':
-                        row.append("🎯")  # Goal
-                    elif desc[i][j] == 'H':
-                        row.append("🕳️")  # Hole
-                    else:
-                        row.append("❄️")  # Frozen
-                grid_display.append("  ".join(row))
+            # Environment-specific visualization
+            if environment == "FrozenLake-v1":
+                grid_size = int(np.sqrt(watch_env.observation_space.n))
+                desc = watch_env.unwrapped.desc.astype(str)
+                
+                # Render FrozenLake grid with emojis
+                grid_display = []
+                for i in range(grid_size):
+                    row = []
+                    for j in range(grid_size):
+                        idx = i * grid_size + j
+                        if idx == obs:
+                            row.append("🤖")  # Agent
+                        elif desc[i][j] == 'S':
+                            row.append("🟢")  # Start
+                        elif desc[i][j] == 'G':
+                            row.append("🎯")  # Goal
+                        elif desc[i][j] == 'H':
+                            row.append("🕳️")  # Hole
+                        else:
+                            row.append("❄️")  # Frozen
+                    grid_display.append("  ".join(row))
+                display_text = "\n".join(grid_display)
+                
+            elif environment == "Taxi-v3":
+                # Taxi environment visualization
+                taxi_row, taxi_col, passenger_loc, destination = watch_env.unwrapped.decode(obs)
+                
+                # Create a simple text representation
+                display_text = f"""
+🚕 TAXI ENVIRONMENT
+Taxi Position: ({taxi_row}, {taxi_col})
+Passenger Location: {passenger_loc}
+Destination: {destination}
+State: {obs}
+                """
             
             # Choose action based on algorithm
             if st.session_state.algorithm == "Q-Learning (tabular)":
@@ -205,13 +244,19 @@ if watch_button:
                 s_vec = one_hot_state(obs, watch_env.observation_space.n)
                 action = agent.choose_action(s_vec, training=False)
             
-            # Add debug info for Q-learning
+            # Add debug info and action descriptions
             debug_info = ""
             if st.session_state.algorithm == "Q-Learning (tabular)":
                 debug_info = f"\nQ-values: {[f'{q:.2f}' for q in q_values]}"
-                debug_info += f"\nAction taken: {action} (0=Left, 1=Down, 2=Right, 3=Up)"
             
-            display_text = "\n".join(grid_display)
+            # Action descriptions for different environments
+            if environment == "FrozenLake-v1":
+                action_names = ["Left", "Down", "Right", "Up"]
+                debug_info += f"\nAction taken: {action} ({action_names[action]})"
+            elif environment == "Taxi-v3":
+                action_names = ["South", "North", "East", "West", "Pickup", "Dropoff"]
+                debug_info += f"\nAction taken: {action} ({action_names[action]})"
+            
             display_text += f"\n\nStep: {steps_taken} | Total Reward: {total_reward:.2f}"
             display_text += debug_info
             placeholder.text(display_text)
@@ -224,32 +269,48 @@ if watch_button:
             
             if terminated or truncated:
                 # Show final state
-                grid_display = []
-                for i in range(grid_size):
-                    row = []
-                    for j in range(grid_size):
-                        idx = i * grid_size + j
-                        if idx == obs:
-                            if reward > 0:
-                                row.append("🏆")  # Won!
+                if environment == "FrozenLake-v1":
+                    grid_display = []
+                    for i in range(grid_size):
+                        row = []
+                        for j in range(grid_size):
+                            idx = i * grid_size + j
+                            if idx == obs:
+                                if reward > 0:
+                                    row.append("🏆")  # Won!
+                                else:
+                                    row.append("💀")  # Fell in hole
+                            elif desc[i][j] == 'S':
+                                row.append("🟢")
+                            elif desc[i][j] == 'G':
+                                row.append("🎯")
+                            elif desc[i][j] == 'H':
+                                row.append("🕳️")
                             else:
-                                row.append("💀")  # Fell in hole
-                        elif desc[i][j] == 'S':
-                            row.append("🟢")
-                        elif desc[i][j] == 'G':
-                            row.append("🎯")
-                        elif desc[i][j] == 'H':
-                            row.append("🕳️")
-                        else:
-                            row.append("❄️")
-                    grid_display.append("  ".join(row))
+                                row.append("❄️")
+                        grid_display.append("  ".join(row))
+                    display_text = "\n".join(grid_display)
+                elif environment == "Taxi-v3":
+                    taxi_row, taxi_col, passenger_loc, destination = watch_env.unwrapped.decode(obs)
+                    display_text = f"""
+🚕 TAXI ENVIRONMENT - FINAL STATE
+Taxi Position: ({taxi_row}, {taxi_col})
+Passenger Location: {passenger_loc}
+Destination: {destination}
+State: {obs}
+                    """
                 
-                display_text = "\n".join(grid_display)
                 display_text += f"\n\nStep: {steps_taken} | Total Reward: {total_reward:.2f}"
-                if reward > 0:
-                    display_text += "\n\n✅ SUCCESS! Reached the goal!"
-                else:
-                    display_text += "\n\n❌ FAILED! Fell into a hole or ran out of time."
+                if environment == "FrozenLake-v1":
+                    if reward > 0:
+                        display_text += "\n\n✅ SUCCESS! Reached the goal!"
+                    else:
+                        display_text += "\n\n❌ FAILED! Fell into a hole or ran out of time."
+                elif environment == "Taxi-v3":
+                    if reward == 20:
+                        display_text += "\n\n✅ SUCCESS! Passenger delivered!"
+                    else:
+                        display_text += "\n\n❌ FAILED! Time limit reached or illegal action."
                 placeholder.text(display_text)
                 break
         
