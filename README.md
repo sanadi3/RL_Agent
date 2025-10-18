@@ -331,4 +331,5 @@ RL_Agent/
 ```
 ## References:
 https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+https://medium.com/intro-to-artificial-intelligence/deep-q-network-dqn-in-pytorch-b769f99c02d2
 ---
