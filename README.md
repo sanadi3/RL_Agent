@@ -139,14 +139,13 @@ class DQN(nn.Module):
     def forward(self, x):
         return self.model(x)
 ```
-nn.Module: Base class providing parameter tracking and device management
-nn.Sequential: Container that chains layers (output of layer i → input of layer i+1)
+nn.Module: Base class providing parameter tracking and device management.
+nn.Sequential: Container that chains layers (output of layer i → input of layer i+1).
 nn.Linear(in, out): Applies affine transformation y = xW^T + b
 
-Weights W initialized with Kaiming/Xavier initialization
+Weights W initialized with Kaiming/Xavier initialization.
 Bias b initialized to zeros
 
-nn.ReLU: max(0, x) — introduces non-linearity, prevents vanishing gradients
 
 Why these dimensions? In 128 → 128 → 64, first layers learn general features, later layers learn task-specific features. Total params ≈ 25K for CartPole.
 
@@ -219,14 +218,6 @@ self.optimizer.zero_grad()  # Clear old gradients (they accumulate by default)
 loss.backward()              # Compute ∂Loss/∂θ via chain rule
 self.optimizer.step()        # Update θ ← θ - lr·∇Loss
 
-Optimizer: Adam
-pythonself.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
-Adam combines momentum and adaptive learning rates:
-
-Momentum: Uses exponential moving average of gradients (reduces oscillation)
-RMSProp: Adapts learning rate per parameter based on gradient magnitude
-Bias correction: Corrects initialization bias in moving averages
-
 Autograd mechanics: PyTorch builds a dynamic computation graph as operations execute. Each tensor remembers its creation operation. When .backward() is called, it traverses the graph in reverse computing gradients via chain rule.
 
 # Model Synchronization
@@ -289,7 +280,7 @@ Choose between:
 3. View Q-values and action explanations (for tabular Q-learning)
 4. Observe success/failure outcomes
 
-## 📊 Expected Results
+## Expected Results
 
 ### Tabular Q-Learning
 - **Convergence**: Usually converges within 1,000-5,000 episodes
@@ -297,7 +288,7 @@ Choose between:
 - **Interpretability**: Q-table shows learned values for each state-action pair
 
 ### Deep Q-Learning
-- **Convergence**: May take 5,000-20,000 episodes depending on hyperparameters
+- **Convergence**: May take 5,000-20,000 episodes
 - **Performance**: Can achieve high success rates but may be less stable
 - **Scalability**: Can handle much larger state spaces than tabular methods
 
