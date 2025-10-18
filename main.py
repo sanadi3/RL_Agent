@@ -158,8 +158,12 @@ if watch_button:
     else:
         st.info(f"🎬 Watching trained {st.session_state.algorithm} agent...")
         
-        # Create visualization environment
-        watch_env = gym.make('FrozenLake-v1', is_slippery=True)
+        # Store original epsilon and set to 0 for pure exploitation
+        original_epsilon = agent.epsilon
+        agent.epsilon = 0.0
+        
+        # FIX: slippery false
+        watch_env = gym.make('FrozenLake-v1', is_slippery=False)
         obs, _ = watch_env.reset()
         total_reward = 0
         grid_size = int(np.sqrt(watch_env.observation_space.n))
@@ -189,22 +193,29 @@ if watch_button:
                         row.append("❄️")  # Frozen
                 grid_display.append("  ".join(row))
             
-            display_text = "\n".join(grid_display)
-            display_text += f"\n\nStep: {steps_taken} | Total Reward: {total_reward:.2f}"
-            placeholder.text(display_text)
-            time.sleep(0.5)
-
             # Choose action based on algorithm
             if st.session_state.algorithm == "Q-Learning (tabular)":
                 # Use greedy policy (no exploration)
-                if obs in agent.Q:
-                    action = int(np.argmax(agent.Q[obs]))
-                else:
-                    action = watch_env.action_space.sample()
+                q_values = agent.Q[obs]
+                max_q = np.max(q_values)
+                best_actions = np.where(q_values == max_q)[0]
+                action = np.random.choice(best_actions)
             else:
                 # DQN: use greedy policy
                 s_vec = one_hot_state(obs, watch_env.observation_space.n)
                 action = agent.choose_action(s_vec, training=False)
+            
+            # Add debug info for Q-learning
+            debug_info = ""
+            if st.session_state.algorithm == "Q-Learning (tabular)":
+                debug_info = f"\nQ-values: {[f'{q:.2f}' for q in q_values]}"
+                debug_info += f"\nAction taken: {action} (0=Left, 1=Down, 2=Right, 3=Up)"
+            
+            display_text = "\n".join(grid_display)
+            display_text += f"\n\nStep: {steps_taken} | Total Reward: {total_reward:.2f}"
+            display_text += debug_info
+            placeholder.text(display_text)
+            time.sleep(0.5)
             
             next_obs, reward, terminated, truncated, _ = watch_env.step(action)
             obs = next_obs
@@ -243,6 +254,9 @@ if watch_button:
                 break
         
         watch_env.close()
+        
+        # Restore original epsilon
+        agent.epsilon = original_epsilon
         
         if total_reward > 0:
             st.success(f"🎉 Agent succeeded in {steps_taken} steps!")

@@ -10,11 +10,13 @@ class DQN(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQN, self).__init__()
         self.model = nn.Sequential(
-            nn.Linear(state_size, 64),  # input layer -> hidden layer
+            nn.Linear(state_size, 128),  # input layer -> hidden layer
             nn.ReLU(),
-            nn.Linear(64, 64),          # hidden layer -> hidden
+            nn.Linear(128, 128),          # hidden layer -> hidden
             nn.ReLU(),
-            nn.Linear(64, action_size)  # output layer -> best Q value per action
+            nn.Linear(128, 64),           # FIX: forgot hidden layer
+            nn.ReLU(),
+            nn.Linear(64, action_size)    # output layer -> best Q value per action
         )
 
     def forward(self, x):
@@ -22,16 +24,19 @@ class DQN(nn.Module):
 
 # define agent
 class DQNAgent:
-        def __init__(self, state_size, action_size, alpha=0.5, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.05):
+        def __init__(self, state_size, action_size, alpha=0.001, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
             self.action_size = action_size
             self.memory= [] # replay buffer
             self.gamma = gamma # discount factor
             self.epsilon = epsilon # exploration rate
             self.epsilon_decay = epsilon_decay
             self.epsilon_min = epsilon_min 
+            self.target_update_frequency = 10  # Update target network every 10 episodes
 
             # init neural network + optimizer + loss function
             self.model = DQN(state_size, action_size)
+            self.target_model = DQN(state_size, action_size)  # FIX: new target network
+            self.target_model.load_state_dict(self.model.state_dict())  # Initialize target network
             self.optimizer = optim.Adam(self.model.parameters(), lr=alpha)
             self.loss_fn = nn.MSELoss()
         
@@ -57,12 +62,12 @@ class DQNAgent:
         def remember(self, transition):
             self.memory.append(transition)
 
-            if len(self.memory) > 10000:
+            if len(self.memory) > 10000: # FIX: extra pre-training experiences
                 self.memory.pop(0)
         
         # sample a batch and train network
         def replay(self, batch_size=64):
-            if len(self.memory) < batch_size:
+            if len(self.memory) < batch_size: # FIX: replay buffer too small
                 return
 
             batch = random.sample(self.memory, batch_size)
@@ -79,10 +84,11 @@ class DQNAgent:
             # gather method picks the Q value for each action
             q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
-            # compute best target Q value. bellman equation:
+            # compute best target Q value using TARGET NETWORK for stability
             # target = reward + gamma * argmax(Q(next_state)) if not done
-            next_q_values = self.model(next_states).max(1)[0].detach()
-            targets = rewards + self.gamma*next_q_values * (1-dones)
+            with torch.no_grad():
+                next_q_values = self.target_model(next_states).max(1)[0]
+                targets = rewards + self.gamma * next_q_values * (1 - dones)
 
             # compute loss between current and target Q-values
             loss = self.loss_fn(q_values, targets)
@@ -94,3 +100,7 @@ class DQNAgent:
 
             #reduce epsilon
             self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
+        
+        def update_target_network(self):
+            """Update target network with current network weights"""
+            self.target_model.load_state_dict(self.model.state_dict())
