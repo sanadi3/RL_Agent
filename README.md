@@ -68,14 +68,14 @@ Limitations
 
     Training Process
 
-    Act: Agent selects action using ε-greedy on main network Q(s,·)
-    Observe: Environment returns (s', r, done)
-    Store: Add transition to replay buffer
-    Sample: Draw random batch of 64 transitions from buffer
-    Compute targets: Use frozen target network for stable TD targets
-    Update: Backpropagate loss to update main network weights
-    Sync: Every 10 episodes, copy θ_main → θ_target
-    Decay: Reduce ε to gradually shift from exploration to exploitation
+    1. Act: Agent selects action using ε-greedy on main network Q(s,·)
+    2. Observe: Environment returns (s', r, done)
+    3. Store: Add transition to replay buffer
+    4. Sample: Draw random batch of 64 transitions from buffer
+    5. Compute targets: Use frozen target network for stable TD targets
+    6. Update: Backpropagate loss to update main network weights
+    7. Sync: Periodically copy θ_main → θ_target
+    8. Decay: Reduce ε
 
 ### Key Differences
 
@@ -148,7 +148,7 @@ Bias b initialized to zeros
 
 nn.ReLU: max(0, x) — introduces non-linearity, prevents vanishing gradients
 
-Why these dimensions? 128 → 128 → 64 is a common funnel pattern. First layers learn general features, later layers learn task-specific features. Total params ≈ 25K for CartPole.
+Why these dimensions? In 128 → 128 → 64, first layers learn general features, later layers learn task-specific features. Total params ≈ 25K for CartPole.
 
 2. Forward Pass
 pythondef forward(self, x):
@@ -161,11 +161,10 @@ x → W1·x + b1 → ReLU → W2·x + b2 → ReLU → ... → Q-values
 pythonstate = torch.FloatTensor(state)     # numpy array → PyTorch tensor
 q_values = model(state)               # Forward pass
 action = torch.argmax(q_values).item() # Get index of max value
-Tensors are PyTorch's multi-dimensional arrays optimized for:
-
-Vectorized operations (SIMD)
-GPU memory layout (coalesced access)
-Automatic gradient tracking
+Tensors are PyTorch's multi-dimensional arrays optimized for
+Vectorized operations (SIMD),
+GPU memory layout (coalesced access),
+Automatic gradient tracking.
 
 .unsqueeze(0) adds a batch dimension: [4] → [1, 4] because networks expect batches.
 
@@ -203,18 +202,18 @@ def replay(self, batch_size=64):
 ```
 .gather() selects Q-values for actions taken: converts [batch, num_actions] → [batch].
 Example: If actions = [1, 0, 2] and Q = [[0.1, 0.3], [0.5, 0.2], [0.4, 0.7]], gather returns [0.3, 0.5, 0.7].
-python# Compute targets using frozen target network
+python
+# Compute targets using frozen target network
 with torch.no_grad():
     next_q_values = self.target_model(next_states).max(1)[0]
     targets = rewards + gamma * next_q_values * (1 - dones)
 torch.no_grad(): Disables autograd (no gradient calculation). Why?
 
 Target network is frozen (no backprop needed)
-Saves memory (no intermediate activations stored)
-Faster computation
 
 (1 - dones) zeros out future value if episode ended (terminal state has no future).
-python# Backpropagation
+
+# Backpropagation
 loss = self.loss_fn(q_values, targets)
 self.optimizer.zero_grad()  # Clear old gradients (they accumulate by default)
 loss.backward()              # Compute ∂Loss/∂θ via chain rule
@@ -228,29 +227,9 @@ Momentum: Uses exponential moving average of gradients (reduces oscillation)
 RMSProp: Adapts learning rate per parameter based on gradient magnitude
 Bias correction: Corrects initialization bias in moving averages
 
-Update rule (simplified):
-m_t = β1·m_{t-1} + (1-β1)·∇Loss      # momentum
-v_t = β2·v_{t-1} + (1-β2)·(∇Loss)²    # variance
-θ_t = θ_{t-1} - α·m_t / (√v_t + ε)    # adaptive update
-Better than SGD for deep networks because it handles:
-
-Sparse gradients (common in RL)
-Non-stationary objectives (Q-values constantly shift)
-Ill-conditioned problems (different parameters need different learning rates)
-
-Gradient Control
-pythonwith torch.no_grad():
-    # Code here doesn't track gradients
-    predictions = model(x)
-Why disable gradients?
-
-Inference: Don't need gradients when just using the model
-Memory: Autograd stores intermediate activations (can be 2-3x model size)
-Speed: Skips gradient computation overhead
-
 Autograd mechanics: PyTorch builds a dynamic computation graph as operations execute. Each tensor remembers its creation operation. When .backward() is called, it traverses the graph in reverse computing gradients via chain rule.
 
-7.Model Synchronization
+# Model Synchronization
 pythonself.target_model.load_state_dict(self.model.state_dict())
 .state_dict() returns an OrderedDict of all parameters: {'model.0.weight': tensor(...), 'model.0.bias': tensor(...), ...}
 .load_state_dict() copies these parameters to target network. This is a deep copy—modifying one network doesn't affect the other.
@@ -280,8 +259,6 @@ pip install gymnasium streamlit matplotlib numpy
 # Start the Streamlit dashboard
 streamlit run main.py
 ```
-
-## How to Use
 
 ### 1. **Training Parameters**
 - **Training Episodes**: Number of episodes to train (100-50,000)
