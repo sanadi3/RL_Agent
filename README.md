@@ -352,5 +352,6 @@ RL_Agent/
 ├── README.md            # This file
 └── venv/                # Virtual environment
 ```
+## References:
+https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 ---
-
