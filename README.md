@@ -221,9 +221,10 @@ self.optimizer.step()        # Update θ ← θ - lr·∇Loss
 Autograd mechanics: PyTorch builds a dynamic computation graph as operations execute. Each tensor remembers its creation operation. When .backward() is called, it traverses the graph in reverse computing gradients via chain rule.
 
 # Model Synchronization
-pythonself.target_model.load_state_dict(self.model.state_dict())
-.state_dict() returns an OrderedDict of all parameters: {'model.0.weight': tensor(...), 'model.0.bias': tensor(...), ...}
-.load_state_dict() copies these parameters to target network. This is a deep copy—modifying one network doesn't affect the other.
+
+- pythonself.target_model.load_state_dict(self.model.state_dict())
+- .state_dict() returns an OrderedDict of all parameters: {'model.0.weight': tensor(...), 'model.0.bias': tensor(...), ...}
+- .load_state_dict() copies these parameters to target network. This is a deep copy, i.e. modifying one network doesn't affect the other.
 
 ### Key PyTorch Concepts Used
 - **Tensors**: Multi-dimensional arrays for neural network computations
